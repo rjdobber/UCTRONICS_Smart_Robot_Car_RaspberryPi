@@ -17,6 +17,9 @@
 #include <stdarg.h>
 #include <getopt.h>
 
+#include "rpihw.h"
+#include "pwm_common.h"
+#include "lights.h"
 #include "motordriver.h"
 #include "remoteserver.h"
 #include "audio.h"
@@ -25,11 +28,7 @@
 #include "dma.h"
 #include "pwm.h"
 
-#include "ws2811.h"
-
 int baseSpeed, addLeftSpeed, addRightSpeed;
-unsigned long getColour = 0xFF0000;
-unsigned int getBrightness = 100;
 static int speedVal_1 = 5000;
 static int speedVal_2 = 5000;
 static int speedVal_3 = 5000;
@@ -52,15 +51,6 @@ unsigned char count;
 #define ARRAY_SIZE(stuff)       (sizeof(stuff) / sizeof(stuff[0]))
 
 // defaults for cmdline options
-#define TARGET_FREQ             WS2811_TARGET_FREQ
-#define GPIO_PIN                18
-#define DMA                     10
-#define STRIP_TYPE              WS2811_STRIP_RGB    // WS2812/SK6812RGB integrated chip+leds
-//#define STRIP_TYPE            WS2811_STRIP_GBR    // WS2812/SK6812RGB integrated chip+leds
-//#define STRIP_TYPE            SK6812_STRIP_RGBW   // SK6812RGBW (NOT SK6812RGB)
-#define WIDTH                   4
-#define HEIGHT                  4
-#define LED_COUNT               (WIDTH * HEIGHT)
 #define SERVO_STEP              50
 #define SERVO_1_CENTER          1450 // L/R - original: 1140
 #define SERVO_2_CENTER          1350 // U/D - original: 630
@@ -70,55 +60,6 @@ unsigned char count;
 #define SERVO_2_MAX             2000
 #define DISTANCE_BEEP_DELAY     400000
 
-int mem_fd;
-void *gpio_map;
-// I/O access
-volatile unsigned *gpio;
-int width = WIDTH;
-int height = HEIGHT;
-int led_count = LED_COUNT;
-int clear_on_exit = 0;
-
-const rpi_hw_t *my_rpi_hw;
-
-ws2811_t ledstring =
-{
-  .freq = TARGET_FREQ,
-  .dmanum = DMA,
-  .channel =
-  {
-    [0] =
-    {
-      .gpionum = GPIO_PIN,
-      .count = LED_COUNT,
-      .invert = 0,
-      .brightness = 100,
-      .strip_type = STRIP_TYPE,
-    },
-    [1] =
-    {
-      .gpionum = 0,
-      .count = 0,
-      .invert = 0,
-      .brightness = 0,
-    },
-  },
-};
-
-ws2811_led_t *matrix;
-
-unsigned long grb_colour_table[] =
-{
-  0xFF0000,  // green
-  0x00FF00,  // red
-  0x0000FF,  // blue
-  0xFFFF00,  //yellow
-  0xFF00FF,
-  0x00FFFF,  //pink
-  0xFFFFFF,  // white
-  //0x000000,
-};
-
 unsigned long receive_colour_table[4] =
 {
   0xFF0000,  // green
@@ -126,6 +67,14 @@ unsigned long receive_colour_table[4] =
   0x0000FF,  // blue
   0xFFFF00,  //yellow
 };
+
+int mem_fd;
+void *gpio_map;
+// I/O access
+volatile unsigned *gpio;
+int clear_on_exit = 0;
+
+const rpi_hw_t *my_rpi_hw;
 
 /* 
  * Creates a server socket and listens for a command from the remote.
@@ -212,7 +161,7 @@ int main(int argc, char *argv[])
     sayWow();
 
     sleep(0.5);
-    GRB_work(3, getColour, getBrightness);
+    GRB_work(3, getColor(), getBrightness());
     n = write(newsockfd, "{\"version\":2}", 13);
     client_Connected = 1;
     sleep(0.001);
@@ -236,9 +185,9 @@ int main(int argc, char *argv[])
             speedVal_4 = 10000 * ((buffer[1] + buffer[3]) / 255.0);
         // --- LED COLOR ---
         } else if (buffer[0] == 'c') { //0x63
-            getColour = (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
-            getBrightness = buffer[4];
-            GRB_work(3, getColour, getBrightness);
+            setColor((buffer[1] << 16) | (buffer[2] << 8) | buffer[3]);
+            setBrightness (buffer[4]);
+            GRB_work(3, getColor(), getBrightness());
             if(readNowTime){
                 readNowTime = 0;
                 previous_time = get_pwm_timestamp();    
@@ -247,12 +196,12 @@ int main(int argc, char *argv[])
             time_stamp = now_time - previous_time;
             if (time_stamp <2000000) {
                 printf("set current direction\n");
-                receive_colour_table[getColIndex] = getColour;
+                receive_colour_table[getColIndex] = getColor();
             } else {
                 readNowTime = 1;
                 printf("set next direction\n");
                 getColIndex = (1+getColIndex)%4;
-                receive_colour_table[getColIndex] = getColour;
+                receive_colour_table[getColIndex] = getColor();
                 previous_time = get_pwm_timestamp();
             }  
         // --- VERSION QUERY ---
@@ -357,7 +306,7 @@ void *thread_tracking_avoidance_ir(void *arg) {
     mySoftPwmWrite4(speedVal_4);
 
     // This updates the LEDs when the car is disconnected
-    //if (!poweroffFlag)  getLedSta();
+    //if (!poweroffFlag)  getLedSta(disWarning, client_Connected);
   }
 
 }
@@ -610,12 +559,12 @@ int PhaseScratchCmd(char command){
     switch (command) {
     case 1: // go forward
       go_forward();
-      GRB_work(3, receive_colour_table[2], getBrightness);
+      GRB_work(3, receive_colour_table[2], getBrightness());
       break;
     case 2: //go backward
       if (!disWarning) {
         go_back();
-        GRB_work(3, receive_colour_table[0], getBrightness);
+        GRB_work(3, receive_colour_table[0], getBrightness());
       }
     else
         stop();
@@ -624,13 +573,13 @@ int PhaseScratchCmd(char command){
       break;
     case 3: //go left
       go_left();
-      GRB_work(3, receive_colour_table[3], getBrightness);
+      GRB_work(3, receive_colour_table[3], getBrightness());
       carstate.trackenable = 0;
       carstate.autoAvoid = 0;
       break;
     case 4: //go right
       go_right();
-      GRB_work(3, receive_colour_table[1], getBrightness);
+      GRB_work(3, receive_colour_table[1], getBrightness());
       carstate.trackenable = 0;
       carstate.autoAvoid = 0;
       break;
@@ -708,27 +657,27 @@ int updateCarState(char command) {
   switch (command) {
     case 0: /* left */
       carstate.left = 1;
-      GRB_work(3, receive_colour_table[2], getBrightness);
+      GRB_work(3, receive_colour_table[2], getBrightness());
       break;
     case 1: /* up */
       if (!disWarning) {
         carstate.forward = 1;
-        GRB_work(3, receive_colour_table[0], getBrightness);
+        GRB_work(3, receive_colour_table[0], getBrightness());
       } else {
         carstate.forward = 0;
-        carstate.trackenable = 0;
-        carstate.autoAvoid = 0;
-	  }
+      }
+      carstate.trackenable = 0;
+      carstate.autoAvoid = 0;
       break;
     case 2: /* right */
       carstate.right = 1;
-      GRB_work(3, receive_colour_table[3], getBrightness);
+      GRB_work(3, receive_colour_table[3], getBrightness());
       carstate.trackenable = 0;
       carstate.autoAvoid = 0;
       break;
     case 3: /* down */
       carstate.back = 1;
-      GRB_work(3, receive_colour_table[1], getBrightness);
+      GRB_work(3, receive_colour_table[1], getBrightness());
       carstate.trackenable = 0;
       carstate.autoAvoid = 0;
       break;
@@ -864,35 +813,6 @@ void beepInit() {
   digitalWrite(BEEP, LOW);
 }
 
-void getLedSta() {
-
-  static unsigned long previous_time = 0;
-  static unsigned long now_time = 0;
-  static unsigned long time_stamp = 0;
-  static unsigned char flag = 0;
-  static unsigned char colour_index = 0;
-  if (!disWarning) {
-
-    if (!client_Connected) {
-      if (!flag) {
-        flag = 1;
-        previous_time = get_pwm_timestamp();
-      }
-      now_time = get_pwm_timestamp();
-      time_stamp = now_time - previous_time;
-      if (time_stamp > 500000) {
-        time_stamp = 0;
-        flag = 0;
-        colour_index = (1 + colour_index) % 7;
-        //GRB_work(3, grb_colour_table[colour_index], 50);
-        GRB_MultiColour_work(3, 100 );
-      }
-    }
-  }
-
-
-}
-
 void beepWarning() {
   static unsigned long previous_time = 0;
   static unsigned long now_time = 0;
@@ -913,7 +833,7 @@ void beepWarning() {
     }
     if (time_stamp > 50000 && time_stamp <= 2 * 50000 ) { //1T
 //      digitalWrite(BEEP, LOW);
-//      GRB_work(3, getColour, getBrightness);
+//      GRB_work(3, getColor(), getBrightness());
     }
     if (time_stamp > 2 * 50000) {
       flag = 0;
@@ -921,7 +841,7 @@ void beepWarning() {
   } else if (canStopBeep) {
     canStopBeep = 0;
 //    digitalWrite(BEEP, LOW);
-//    GRB_work(3, getColour, getBrightness);
+//    GRB_work(3, getColor(), getBrightness());
   }
 }
 
@@ -935,17 +855,16 @@ void trackModeWork() {
     mySoftPwmWrite3(speedVal_3);
     mySoftPwmWrite4(speedVal_4);
 
-
     num1 = GET_GPIO(leftSensor);
     num2 = GET_GPIO(middleSensor);
     num3 = GET_GPIO(rightSensor);
     if ((num2 == 0) && (num1 == 0) && (num3 == 0)) {
       stop(); continue;
     } else if ( (num1 == 0) && num3) { //go to right
-            GRB_work(3, grb_colour_table[0], 100 ) ;
+      GRB_work(3, receive_colour_table[0], 100 ) ;
       go_forward_left();
       while (1) {
-          GRB_work(3, grb_colour_table[0], 100 ) ;
+        GRB_work(3, receive_colour_table[0], 100 ) ;
         num2 = GET_GPIO(middleSensor);
         mySoftPwmWrite1(speedVal_1);
         mySoftPwmWrite2(speedVal_2);
@@ -957,7 +876,7 @@ void trackModeWork() {
             stop();
           }
           else {
-              GRB_work(3, grb_colour_table[1], 100 ) ;
+            GRB_work(3, receive_colour_table[1], 100 ) ;
             go_forward_left();
           }
           continue;
@@ -978,7 +897,7 @@ void trackModeWork() {
             stop();
           }
           else {
-              GRB_work(3, grb_colour_table[2], 100 ) ;
+              GRB_work(3, receive_colour_table[2], 100 ) ;
             go_forward_right();
           }
           continue;
@@ -991,9 +910,7 @@ void trackModeWork() {
     else {
       go_forward();
     }
-
   }
-
 }
 
 unsigned char countLow(void)
@@ -1029,6 +946,7 @@ void getIR() {
   }
   done = 1;
 }
+
 void turn() {
   static unsigned long previous_time = 0;
   static unsigned long now_time = 0;
@@ -1041,13 +959,18 @@ void turn() {
   now_time = get_pwm_timestamp();
   time_stamp = now_time - previous_time;
   if (time_stamp > 0 && time_stamp <= turnTime ) { //1/2T
-    go_back();turnBackFlag = 1;
+    go_back();
+    turnBackFlag = 1;
   }
   if (time_stamp > turnTime && time_stamp <= 2 * turnTime ) { //1T
-    go_left();turnLeftFlag = 1;
+    go_left();
+    turnLeftFlag = 1;
   }
   if (time_stamp > 2 * turnTime) {
-    stop(); flag = 0;turnLeftFlag = 0;turnBackFlag = 0;
+    stop();
+    flag = 0;
+    turnLeftFlag = 0;
+    turnBackFlag = 0;
   }
 }
 
@@ -1111,15 +1034,6 @@ void setup_io()
   // Always use volatile pointer!
   gpio = (volatile unsigned *)gpio_map;
 } // setup_io
-
-uint64_t get_pwm_timestamp()
-{
-  struct timespec t;
-  if (clock_gettime(CLOCK_MONOTONIC_RAW, &t) != 0) {
-    return 0;
-  }
-  return (uint64_t) t.tv_sec * 1000000 + t.tv_nsec / 1000;
-}
 
 void mySoftPwmWrite1( int value)
 {
@@ -1307,31 +1221,6 @@ void servoAControl( int value)
   }
 }
 
-void GRB_work(unsigned int ledNum, unsigned long colour, int brightness ) {
-  printf("GRB_work: %d, 0x%.6lx, %d\n", ledNum, colour, brightness);
-  int i = ledNum-1;
-  ledstring.channel[0].brightness = brightness;
-  for (i = 0; i < ledNum; i++) {
-    ledstring.channel[0].leds[i] = colour;
-  }
-  ws2811_render(&ledstring) ;
-}
-
-void GRB_MultiColour_work(unsigned int ledNum, int brightness ) {
-  int i = ledNum-1;
-  static int colour_index = 0;
-  printf("GRB_MultiColour_work: %d, 0x%.6lx, %d\n", ledNum, grb_colour_table[colour_index], brightness);
-
-  ledstring.channel[0].brightness = brightness;
-  for (i = 0; i < ledNum; i++) {
-    colour_index = (1 + colour_index) % 7;
-    ledstring.channel[0].leds[i] = grb_colour_table[colour_index];
-  }
-  ws2811_render(&ledstring) ;
-
-}
-
-
 void irInit() {
   pinMode(IRIN, INPUT);
   pullUpDnControl(IRIN, PUD_UP);
@@ -1349,16 +1238,6 @@ void myPWMInit() {
   OUT_GPIO(MOTOR_3_PWM);
   INP_GPIO(MOTOR_4_PWM); // must use INP_GPIO before we can use OUT_GPIO
   OUT_GPIO(MOTOR_4_PWM);
-}
-
-void GRBInit() {
-  ws2811_return_t ret;
-  matrix = malloc(sizeof(ws2811_led_t) * width * height);
-  if ((ret = ws2811_init(&ledstring)) != WS2811_SUCCESS)
-  {
-    fprintf(stderr, "ws2811_init failed: %s\n", ws2811_get_return_t_str(ret));
-  }
-
 }
 
 void exit_UCTRONICS_Robot_Car(void)
@@ -1386,8 +1265,8 @@ void  INThandler(int sig)
     printf("Bye.\n");
     exit(0);
   }
-
-  else
+  else {
     signal(SIGINT, INThandler);
+  }
   getchar(); // Get new line character
 }

@@ -102,12 +102,10 @@ int updateCarState(char command);
 void clearFlag(void);
 void beepWarning(void);
 void beepInit(void);
-void ledInit(void);
 void servoInit(void);
 void servoCtrl(int servoNum, int dutyCycle);
 void servoAControl( int value);
 
-void getLedSta();
 unsigned char countLow(void);
 void getIR(void );
 int IR_updateCarState(int command) ;
@@ -117,14 +115,11 @@ void avoidance(void);
 void BEEP_INT (void);
 void BEEP_OPEN (void);
 void delayns(int n);
-void GRB_Set(unsigned char gdat,unsigned char rdat,unsigned char bdat);
-void GRB_MultiColour_work(unsigned int ledNum,  int brightness );
 void setup_io();
 
 void *thread_distance_servo(void *arg);
 void *thread_tracking_avoidance_ir(void *arg);
 
-uint64_t get_pwm_timestamp();
 int updateCarMotion(void);
 
 int updateCarState(char command);
@@ -134,8 +129,6 @@ void mySoftPwmWrite2( int value);
 void mySoftPwmWrite3( int value);
 void mySoftPwmWrite4( int value);
 
-void GRBInit();
-void GRB_work(unsigned int ledNum, unsigned long colour, int brightness );
 void irInit();
 void myPWMInit();
 
