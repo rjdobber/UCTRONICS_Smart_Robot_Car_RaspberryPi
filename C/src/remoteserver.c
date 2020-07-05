@@ -28,11 +28,27 @@
 #include "dma.h"
 #include "pwm.h"
 
+#define BLOCK_SIZE (4*1024)
+#define ARRAY_SIZE(stuff)       (sizeof(stuff) / sizeof(stuff[0]))
+
+// defaults for cmdline options
+#define SERVO_STEP              50
+#define SERVO_1_CENTER          1450 // L/R - original: 1140
+#define SERVO_2_CENTER          1350 // U/D - original: 630
+#define SERVO_1_MIN             500
+#define SERVO_1_MAX             2300
+#define SERVO_2_MIN             400
+#define SERVO_2_MAX             2000
+#define DISTANCE_BEEP_DELAY     400000
+
 int baseSpeed, addLeftSpeed, addRightSpeed;
 static int speedVal_1 = 5000;
 static int speedVal_2 = 5000;
 static int speedVal_3 = 5000;
 static int speedVal_4 = 5000;
+
+static int angleA = SERVO_1_CENTER;
+static int angleB = SERVO_2_CENTER;
 
 struct motionstate carstate = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static unsigned char disWarning  = 0;
@@ -46,19 +62,6 @@ unsigned char done;
 int sockfd, newsockfd, portno, clilen;
 unsigned char client_Connected = 0;
 unsigned char count;
-
-#define BLOCK_SIZE (4*1024)
-#define ARRAY_SIZE(stuff)       (sizeof(stuff) / sizeof(stuff[0]))
-
-// defaults for cmdline options
-#define SERVO_STEP              50
-#define SERVO_1_CENTER          1450 // L/R - original: 1140
-#define SERVO_2_CENTER          1350 // U/D - original: 630
-#define SERVO_1_MIN             500
-#define SERVO_1_MAX             2300
-#define SERVO_2_MIN             400
-#define SERVO_2_MAX             2000
-#define DISTANCE_BEEP_DELAY     400000
 
 unsigned long receive_colour_table[4] =
 {
@@ -312,8 +315,6 @@ void *thread_tracking_avoidance_ir(void *arg) {
 }
 
 int updateCarMotion(void) {
-  static int angleA = 1140;
-  static int angleB = 1140;
   char direction[16];
   strcpy(direction, "stop");
 
@@ -653,7 +654,7 @@ int PhaseScratchCmd(char command){
 /*
  * Updates the struct MotionState of the car.
  */
-int updateCarState(char command) {
+ int updateCarState(char command) {
   switch (command) {
     case 0: /* left */
       carstate.left = 1;
@@ -744,10 +745,25 @@ int updateCarState(char command) {
       exit_UCTRONICS_Robot_Car();
       printf("power off\n");
       system("sudo poweroff");
-
+      break;
+    case 20: /* center camera */
+      printf("center camera\n");
+      centerServos();
       break;
   }
   return 0;
+}
+
+void centerServos(void)
+{
+    int pulsenum;
+
+    angleA = SERVO_1_CENTER;
+    angleB = SERVO_2_CENTER;
+    for (pulsenum = 0; pulsenum < 10; pulsenum++) {
+    servoCtrl(servo_1, SERVO_1_CENTER); // orig: 1140
+    servoCtrl(servo_2, SERVO_2_CENTER); // orig: 630
+    }
 }
 
 void ultraInit(void)
@@ -804,8 +820,6 @@ void trackModeInit() {
   GPIO_PULL = 1 << middleSensor;
   INP_GPIO(rightSensor);
   GPIO_PULL = 1 << rightSensor;
-
-
 }
 
 void beepInit() {
@@ -860,7 +874,7 @@ void trackModeWork() {
     num3 = GET_GPIO(rightSensor);
     if ((num2 == 0) && (num1 == 0) && (num3 == 0)) {
       stop(); continue;
-    } else if ( (num1 == 0) && num3) { //go to right
+    } else if ( (num1 == 0) && num3) { //go to left
       GRB_work(3, receive_colour_table[0], 100 ) ;
       go_forward_left();
       while (1) {
@@ -883,7 +897,7 @@ void trackModeWork() {
         } else
           break;
       }
-    } else if ((num3 == 0) && num1) { // go to left
+    } else if ((num3 == 0) && num1) { // go to right
       go_forward_right();
       while (1) {
         num2 = GET_GPIO(middleSensor);
@@ -994,10 +1008,6 @@ void avoidance(void)
   }
 }
 
-void BEEP_INT (void) {
-  digitalWrite(BEEP, HIGH);
-}
-
 void BEEP_OPEN (void) {
 //  digitalWrite(BEEP, HIGH);
 //  delay(500);
@@ -1035,7 +1045,48 @@ void setup_io()
   gpio = (volatile unsigned *)gpio_map;
 } // setup_io
 
-void mySoftPwmWrite1( int value)
+
+
+void servoInit(void)
+{
+  INP_GPIO(servo_1); // must use INP_GPIO before we can use OUT_GPIO
+  OUT_GPIO(servo_1);
+  INP_GPIO(servo_2); // must use INP_GPIO before we can use OUT_GPIO
+  OUT_GPIO(servo_2);
+}
+
+void servoCtrl(int servoNum, int dutyCycle)
+{
+    int count =0;
+    for(count = 0; count < 3; count ++){
+        GPIO_SET = 1 << servoNum;
+        delayMicroseconds(dutyCycle);
+        GPIO_CLR = 1 << servoNum;
+        delayMicroseconds(25000 - dutyCycle);
+    }
+}
+
+void irInit() {
+  pinMode(IRIN, INPUT);
+  pullUpDnControl(IRIN, PUD_UP);
+  // to detect falling edge
+  wiringPiISR(IRIN, INT_EDGE_FALLING, (void*)getIR);
+  done = 0;
+}
+
+void myPWMInit() {
+  // Switch GPIO 7..11 to output mode
+  INP_GPIO(MOTOR_1_PWM); // must use INP_GPIO before we can use OUT_GPIO
+  OUT_GPIO(MOTOR_1_PWM);
+  INP_GPIO(MOTOR_2_PWM); // must use INP_GPIO before we can use OUT_GPIO
+  OUT_GPIO(MOTOR_2_PWM);
+  INP_GPIO(MOTOR_3_PWM); // must use INP_GPIO before we can use OUT_GPIO
+  OUT_GPIO(MOTOR_3_PWM);
+  INP_GPIO(MOTOR_4_PWM); // must use INP_GPIO before we can use OUT_GPIO
+  OUT_GPIO(MOTOR_4_PWM);
+}
+
+void mySoftPwmWrite1(int value)
 {
   static int previous_time = 0;
   static int now_time = 0;
@@ -1069,7 +1120,7 @@ void mySoftPwmWrite1( int value)
   }
 }
 
-void mySoftPwmWrite2( int value)
+void mySoftPwmWrite2(int value)
 {
   static int previous_time = 0;
   static int now_time = 0;
@@ -1101,7 +1152,7 @@ void mySoftPwmWrite2( int value)
     flag2 = 0;
   }
 }
-void mySoftPwmWrite3( int value)
+void mySoftPwmWrite3(int value)
 {
   static int previous_time = 0;
   static int now_time = 0;
@@ -1134,7 +1185,7 @@ void mySoftPwmWrite3( int value)
   }
 }
 
-void mySoftPwmWrite4( int value)
+void mySoftPwmWrite4(int value)
 {
   static int previous_time = 0;
   static int now_time = 0;
@@ -1166,78 +1217,6 @@ void mySoftPwmWrite4( int value)
   if (time_stamp > 2 * halfPWMPeriod) {
     flag4 = 0;
   }
-}
-
-void servoInit(void)
-{
-  INP_GPIO(servo_1); // must use INP_GPIO before we can use OUT_GPIO
-  OUT_GPIO(servo_1);
-  INP_GPIO(servo_2); // must use INP_GPIO before we can use OUT_GPIO
-  OUT_GPIO(servo_2);
-}
-
-void servoCtrl(int servoNum, int dutyCycle)
-{
-    int count =0;
-    for(count = 0; count < 3; count ++){
-        GPIO_SET = 1 << servoNum;
-        delayMicroseconds(dutyCycle);
-        GPIO_CLR = 1 << servoNum;
-        delayMicroseconds(25000 - dutyCycle);
-    }
-}
-
-void servoAControl( int value)
-{
-  static int previous_time = 0;
-  static int now_time = 0;
-  static int time_stamp = 0;
-  static  unsigned char flag1 = 0;
-
-  if (!flag1) {
-    flag1 = 1;
-    previous_time = get_pwm_timestamp();
-  }
-  now_time = get_pwm_timestamp();
-  time_stamp = now_time - previous_time;
-  if (time_stamp > 0 && time_stamp <= 10000 ) { //1/2T
-    if (time_stamp <= value ) {
-      GPIO_SET = 1 << servo_1;
-    }
-    else {
-      GPIO_CLR = 1 << servo_1;
-    }
-  }
-  if (time_stamp > 10000 && time_stamp <= 2 * 10000 ) { //1T
-    if (time_stamp <= value ) {
-      GPIO_SET = 1 << servo_1;
-    }
-    else {
-      GPIO_CLR = 1 << servo_1;
-    }
-  }
-  if (time_stamp > 2 * 10000) {
-    flag1 = 0;
-  }
-}
-
-void irInit() {
-  pinMode(IRIN, INPUT);
-  pullUpDnControl(IRIN, PUD_UP);
-  // to detect falling edge
-  wiringPiISR(IRIN, INT_EDGE_FALLING, (void*)getIR);
-  done = 0;
-}
-void myPWMInit() {
-  // Switch GPIO 7..11 to output mode
-  INP_GPIO(MOTOR_1_PWM); // must use INP_GPIO before we can use OUT_GPIO
-  OUT_GPIO(MOTOR_1_PWM);
-  INP_GPIO(MOTOR_2_PWM); // must use INP_GPIO before we can use OUT_GPIO
-  OUT_GPIO(MOTOR_2_PWM);
-  INP_GPIO(MOTOR_3_PWM); // must use INP_GPIO before we can use OUT_GPIO
-  OUT_GPIO(MOTOR_3_PWM);
-  INP_GPIO(MOTOR_4_PWM); // must use INP_GPIO before we can use OUT_GPIO
-  OUT_GPIO(MOTOR_4_PWM);
 }
 
 void exit_UCTRONICS_Robot_Car(void)

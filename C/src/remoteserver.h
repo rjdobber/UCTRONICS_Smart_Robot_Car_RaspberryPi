@@ -19,11 +19,11 @@
 #define IR_stop  0x40bf
 
 /******************For new IR controller****************************/
-#define IR_up_v2            0x18E7        //up
-#define IR_down_v2       0x52AD        //down
-#define IR_Left_v2       0x08F7        //left
-#define IR_right_v2      0x5AA5        //right
-#define IR_stop_v2       0x1CE3        //stop
+#define IR_up_v2             0x18E7        //up
+#define IR_down_v2           0x52AD        //down
+#define IR_Left_v2           0x08F7        //left
+#define IR_right_v2          0x5AA5        //right
+#define IR_stop_v2           0x1CE3        //stop
 
 
 #if 1
@@ -38,7 +38,6 @@
 
     #define IR_track         0x42bd
     #define IR_track_stop    0x4ab5
-
 #else
     #define IR_speed_up      0x45ba        //1
     #define IR_speed_down    0x46b9        //2
@@ -54,26 +53,9 @@
 #endif
 
 
-// GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
-#define INP_GPIO(g) *(gpio+((g)/10)) &= ~(7<<(((g)%10)*3))
-#define OUT_GPIO(g) *(gpio+((g)/10)) |=  (1<<(((g)%10)*3))
-#define SET_GPIO_ALT(g,a) *(gpio+(((g)/10))) |= (((a)<=3?(a)+4:(a)==4?3:2)<<(((g)%10)*3))
- 
-#define GPIO_SET *(gpio+7)  // sets   bits which are 1 ignores bits which are 0
-#define GPIO_CLR *(gpio+10) // clears bits which are 1 ignores bits which are 0
- 
-#define GET_GPIO(g) (*(gpio+13)&(1<<g)) // 0 if LOW, (1<<g) if HIGH
- 
-#define GPIO_PULL *(gpio+37) // Pull up/pull down
-#define GPIO_PULLCLK0 *(gpio+38) // Pull up/pull down clock
-
-#define CODE1    {GPIO_SET = 1<<4;delayns(800); GPIO_CLR = 1<<4;delayns(400); }
-#define CODE0    {GPIO_SET = 1<<4;delayns(400); GPIO_CLR = 1<<4;delayns(800); }
-#define RES    {GPIO_CLR = 1<<4;delayns(800);delayns(50000);delayns(50000);}
 #define BUFFER_SIZE 10
 
-#define halfPWMPeriod   5000  //5ms
-#define  turnTime        500000    //500ms
+#define turnTime        500000  //500ms
 
 struct motionstate {
     unsigned int left:1;
@@ -104,7 +86,7 @@ void beepWarning(void);
 void beepInit(void);
 void servoInit(void);
 void servoCtrl(int servoNum, int dutyCycle);
-void servoAControl( int value);
+void centerServos(void);
 
 unsigned char countLow(void);
 void getIR(void );
@@ -112,7 +94,6 @@ int IR_updateCarState(int command) ;
 int IR_updateCarMotion (); 
 void turn();
 void avoidance(void);
-void BEEP_INT (void);
 void BEEP_OPEN (void);
 void delayns(int n);
 void setup_io();
@@ -124,13 +105,14 @@ int updateCarMotion(void);
 
 int updateCarState(char command);
 
-void mySoftPwmWrite1( int value);
-void mySoftPwmWrite2( int value);
-void mySoftPwmWrite3( int value);
-void mySoftPwmWrite4( int value);
-
 void irInit();
+
 void myPWMInit();
+
+void mySoftPwmWrite1(int value);
+void mySoftPwmWrite2(int value);
+void mySoftPwmWrite3(int value);
+void mySoftPwmWrite4(int value);
 
 int PhaseScratchCmd(char command);
 void INThandler(int sig);

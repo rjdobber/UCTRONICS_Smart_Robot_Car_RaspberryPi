@@ -21,40 +21,40 @@ void saySad() {
 void sayRandom() {
 	switch (word) {
 		case 0:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word2.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word2.wav &");
 			break;
 		case 1:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word3.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word3.wav &");
 			break;
 		case 2:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word4.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word4.wav &");
 			break;
 		case 3:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word5.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word5.wav &");
 			break;
 		case 4:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word7.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word7.wav &");
 			break;
 		case 5:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word8.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word8.wav &");
 			break;
 		case 6:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word9.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word9.wav &");
 			break;
 		case 7:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word11.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2-word11.wav &");
 			break;
 		case 8:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2d2_3.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2d2_3.wav &");
 			break;
 		case 9:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2d2_4.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2d2_4.wav &");
 			break;
 		case 10:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2d2-1.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2d2-1.wav &");
 			break;
 		case 11:
-			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2d2n8.wav");
+			system("aplay --device plughw:CARD=Device,DEV=0 /home/pi/sounds/r2d2n8.wav &");
 			break;
 	}
 	

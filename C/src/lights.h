@@ -1,3 +1,6 @@
+#ifndef __LIGHTS_H__
+#define __LIGHTS_H__
+
 void ledInit(void);
 void getLedSta(unsigned char disWarning, unsigned char client_Connected);
 void GRB_Set(unsigned char gdat,unsigned char rdat,unsigned char bdat);
@@ -9,3 +12,5 @@ unsigned long getColor();
 unsigned int getBrightness();
 void setColor(unsigned long _color);
 void setBrightness(unsigned int _brightness);
+
+#endif /* __LIGHTS_H__ */
